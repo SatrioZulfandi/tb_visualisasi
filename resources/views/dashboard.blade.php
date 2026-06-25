@@ -68,17 +68,25 @@
         <div id="donutChart"></div>
     </div>
     <div class="card">
-        <h3 class="card-title">K-Means: Customer Segmentation (Qty vs Spend)</h3>
-        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Visualisasi sampel 500 data pesanan dari hasil segmentasi K-Means.</p>
-        <div id="scatterChart"></div>
+        <h3 class="card-title">K-Means: Customer Segmentation</h3>
+        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Perbandingan rata-rata Quantity & Spend per segmen pelanggan.</p>
+        <div id="clusterBarChart"></div>
     </div>
 </div>
 
 {{-- CHARTS ROW 3 (Random Forest) --}}
 <div class="card">
     <h3 class="card-title">Random Forest: Faktor Utama Pembatalan Pesanan</h3>
-    <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Feature Importance dari algoritma Random Forest untuk mendeteksi penyebab utama pesanan dibatalkan.</p>
+    <p style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Seberapa besar pengaruh masing-masing faktor terhadap pembatalan pesanan (dalam persen).</p>
+    <p style="font-size: 11px; color: #f59e0b; font-style: italic; margin-bottom: 12px;">
+        <svg style="width: 12px; height: 12px; display: inline-block; vertical-align: middle; margin-right: 2px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        *Insight ini merupakan hasil model prediktif dari keseluruhan data historis dan tidak terpengaruh oleh filter bulan atau provinsi di atas.
+    </p>
     <div id="rfChart"></div>
+    <div id="rfInsight" style="margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #f0f4ff, #ede9fe); border-left: 4px solid #8b5cf6; border-radius: 8px; font-size: 13px; color: #334155; line-height: 1.6; display: none;">
+        <strong style="color: #6d28d9;">💡 Insight:</strong>
+        <span id="rfInsightText"></span>
+    </div>
 </div>
 
 @endsection
@@ -99,7 +107,7 @@
         stroke: { curve: 'smooth' },
         yaxis: {
             labels: {
-                formatter: (value) => { return "Rp " + (value / 1000000).toFixed(1) + "M" }
+                formatter: (value) => { return "Rp " + (value / 1000000).toFixed(1) + " Jt" }
             }
         }
     };
@@ -134,47 +142,152 @@
     };
     new ApexCharts(document.querySelector("#donutChart"), donutOptions).render();
 
-    // 4. Scatter Plot (K-Means)
-    const scatterDataRaw = @json($scatterChart);
-    const scatterSeries = Object.keys(scatterDataRaw).map(key => {
-        return {
-            name: key,
-            data: scatterDataRaw[key]
-        }
-    });
-    const scatterOptions = {
-        series: scatterSeries,
-        chart: { type: 'scatter', height: 320, zoom: { type: 'xy' } },
-        colors: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'],
+    // 4. Grouped Bar Chart (K-Means Cluster Stats)
+    const clusterData = @json($clusterStats);
+    const clusterLabels = clusterData.map(item => item.cluster_label);
+    const clusterBarOptions = {
+        series: [
+            {
+                name: 'Rata-rata Quantity',
+                data: clusterData.map(item => Number(Number(item.avg_qty).toFixed(1)))
+            },
+            {
+                name: 'Rata-rata Spend (Rp)',
+                data: clusterData.map(item => Math.round(Number(item.avg_spend)))
+            }
+        ],
+        chart: { 
+            type: 'bar', 
+            height: 320, 
+            toolbar: { show: false },
+            fontFamily: 'Inter, sans-serif'
+        },
+        colors: ['#3b82f6', '#f59e0b'],
+        plotOptions: {
+            bar: { 
+                borderRadius: 6, 
+                columnWidth: '50%',
+                dataLabels: { position: 'top' }
+            }
+        },
+        dataLabels: { 
+            enabled: true, 
+            offsetY: -20,
+            style: { fontSize: '11px', colors: ['#334155'] },
+            formatter: function(val, opts) {
+                if (opts.seriesIndex === 1) return 'Rp ' + (val / 1000).toFixed(0) + 'K';
+                return val;
+            }
+        },
         xaxis: { 
-            title: { text: 'Total Quantity' },
-            tickAmount: 10
+            categories: clusterLabels,
+            labels: { style: { fontWeight: 600 } }
         },
-        yaxis: { 
-            title: { text: 'Total Pembayaran (Rp)' },
-            labels: { formatter: (val) => "Rp " + (val / 1000).toFixed(0) + "K" }
+        yaxis: [
+            {
+                title: { text: 'Rata-rata Quantity' },
+                labels: { formatter: (val) => val.toFixed(0) }
+            },
+            {
+                opposite: true,
+                title: { text: 'Rata-rata Spend (Rp)' },
+                labels: { formatter: (val) => 'Rp ' + (val / 1000).toFixed(0) + 'K' }
+            }
+        ],
+        legend: { position: 'top' },
+        tooltip: {
+            y: {
+                formatter: function(val, opts) {
+                    if (opts.seriesIndex === 1) return 'Rp ' + val.toLocaleString('id-ID');
+                    return val + ' item';
+                }
+            }
         },
-        legend: { position: 'top' }
+        grid: { borderColor: '#e2e8f0', strokeDashArray: 4 }
     };
-    new ApexCharts(document.querySelector("#scatterChart"), scatterOptions).render();
+    new ApexCharts(document.querySelector("#clusterBarChart"), clusterBarOptions).render();
 
-    // 5. Bar Chart (Random Forest Feature Importance)
+    // 5. Horizontal Bar Chart (Random Forest Feature Importance)
     const rfData = @json($featureImportance);
     if(rfData && rfData.features) {
+        // Convert to percentage
+        const totalImportance = rfData.importances.reduce((a, b) => a + b, 0);
+        const rfPercentages = rfData.importances.map(val => Number(((val / totalImportance) * 100).toFixed(1)));
+        
+        // Sort descending
+        const rfCombined = rfData.features.map((f, i) => ({ feature: f, pct: rfPercentages[i] }));
+        rfCombined.sort((a, b) => b.pct - a.pct);
+        
+        // Gradient colors: most important = darkest purple
+        const rfColors = rfCombined.map((item, i) => {
+            const opacity = 1 - (i * 0.13);
+            return `rgba(139, 92, 246, ${Math.max(opacity, 0.25)})`;
+        });
+
         const rfOptions = {
             series: [{
-                name: 'Importance Score',
-                data: rfData.importances.map(val => Number(val.toFixed(4)))
+                name: 'Pengaruh',
+                data: rfCombined.map(item => item.pct)
             }],
-            chart: { type: 'bar', height: 280, toolbar: { show: false } },
-            colors: ['#8b5cf6'],
-            plotOptions: {
-                bar: { borderRadius: 4, horizontal: false, columnWidth: '40%' }
+            chart: { 
+                type: 'bar', 
+                height: 300, 
+                toolbar: { show: false },
+                fontFamily: 'Inter, sans-serif'
             },
-            dataLabels: { enabled: true, formatter: function (val) { return val; } },
-            xaxis: { categories: rfData.features }
+            colors: rfColors,
+            plotOptions: {
+                bar: { 
+                    borderRadius: 6, 
+                    horizontal: true, 
+                    barHeight: '55%',
+                    distributed: true,
+                    dataLabels: { position: 'right' }
+                }
+            },
+            dataLabels: { 
+                enabled: true, 
+                formatter: function(val) { return val + '%'; },
+                offsetX: 5,
+                style: { fontSize: '12px', fontWeight: 700, colors: ['#334155'] }
+            },
+            xaxis: { 
+                categories: rfCombined.map(item => item.feature),
+                max: 100,
+                labels: { 
+                    formatter: (val) => val + '%',
+                    style: { colors: '#94a3b8' }
+                },
+                axisBorder: { show: false }
+            },
+            yaxis: {
+                labels: { 
+                    style: { fontSize: '13px', fontWeight: 600, colors: '#334155' } 
+                }
+            },
+            legend: { show: false },
+            tooltip: {
+                y: {
+                    formatter: function(val) { return val + '% pengaruh terhadap pembatalan'; }
+                }
+            },
+            grid: { 
+                borderColor: '#f1f5f9', 
+                xaxis: { lines: { show: true } },
+                yaxis: { lines: { show: false } },
+                padding: { left: 10, right: 30 }
+            }
         };
         new ApexCharts(document.querySelector("#rfChart"), rfOptions).render();
+
+        // Generate insight text
+        const topFactor = rfCombined[0];
+        const insightEl = document.getElementById('rfInsight');
+        const insightText = document.getElementById('rfInsightText');
+        insightText.innerHTML = `Faktor <strong>"${topFactor.feature}"</strong> memiliki pengaruh paling besar (${topFactor.pct}%) terhadap pembatalan pesanan. ` +
+            (rfCombined.length > 1 ? `Faktor kedua adalah <strong>"${rfCombined[1].feature}"</strong> (${rfCombined[1].pct}%), ` : '') +
+            `sementara faktor lainnya memiliki pengaruh yang relatif kecil.`;
+        insightEl.style.display = 'block';
     }
 </script>
 @endsection

@@ -135,9 +135,14 @@
             <h1>ShopViz</h1>
         </div>
         <nav>
-            <a href="/" class="nav-link active">
+            <a href="/" class="nav-link {{ request()->is('/') ? 'active' : '' }}">
                 <i data-feather="pie-chart"></i> Dashboard
             </a>
+
+            <a href="/insights" class="nav-link {{ request()->is('insights') ? 'active' : '' }}">
+                <i data-feather="zap"></i> Insights
+            </a>
+
         </nav>
     </aside>
 
